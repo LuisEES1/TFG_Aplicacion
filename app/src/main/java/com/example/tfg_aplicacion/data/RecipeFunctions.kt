@@ -1,6 +1,5 @@
 package com.example.tfg_aplicacion.data
 
-import com.example.composeapp.repository.FoodRepository
 import com.example.tfg_aplicacion.models.Food
 
 // Retorna true si el usuario tiene todos los ingredientes necesarios para la receta

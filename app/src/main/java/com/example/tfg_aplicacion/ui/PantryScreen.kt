@@ -9,7 +9,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -22,15 +23,20 @@ import com.example.tfg_aplicacion.ui.theme.IconDark
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PantryScreen(modifier: Modifier = Modifier) {
-    // Mantenemos el fondo blanco
-    val backgroundColor = ContentBackground
-    val buttonColor = Color(0xFFFF9800) // Podrías reutilizar TopBarOrange
-    val textColor = IconDark           // Texto oscuro
+    // Lanzamos un efecto al inicializar
+    LaunchedEffect(Unit) {
+        FoodRepository.startListening()
+    }
 
-    // Control del desplegable
+    // Colores definidos en tema
+    val backgroundColor = ContentBackground    // Fondo de pantalla
+    val buttonColor     = Color(0xFFFF9800)    // Color del botón "Agregar"
+    val textColor       = IconDark             // Color del texto
+
+    // Estado para controlar el desplegable
     var expanded by remember { mutableStateOf(false) }
+    // Guarda el ingrediente seleccionado
     var selectedIngredient by remember { mutableStateOf(availableIngredients.first()) }
-    var quantity by remember { mutableStateOf("") }
 
     Column(
         modifier = modifier
@@ -38,26 +44,35 @@ fun PantryScreen(modifier: Modifier = Modifier) {
             .background(backgroundColor)
             .padding(16.dp)
     ) {
-        Text("Despensa", style = MaterialTheme.typography.headlineMedium, color = textColor)
+        // Título de la pantalla
+        Text(
+            text = "Despensa",
+            style = MaterialTheme.typography.headlineMedium,
+            color = textColor
+        )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(16.dp))
 
-        // Desplegable
-        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        // Desplegable de ingredientes disponibles
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded }
+        ) {
             OutlinedTextField(
                 value = selectedIngredient.name,
-                onValueChange = {},
+                onValueChange = {},           // Campo de solo lectura
                 readOnly = true,
                 label = { Text("Selecciona ingrediente", color = textColor) },
                 colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedTextColor = textColor,
-                    focusedBorderColor = textColor,
+                    focusedTextColor     = textColor,
+                    focusedBorderColor   = textColor,
                     unfocusedBorderColor = textColor,
-                    cursorColor = textColor,
-                    focusedLabelColor = textColor,
-                    unfocusedLabelColor = textColor
+                    cursorColor          = textColor,
+                    focusedLabelColor    = textColor,
+                    unfocusedLabelColor  = textColor
                 ),
                 trailingIcon = {
+                    // Icono para abrir/cerrar el menú
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
                 },
                 modifier = Modifier
@@ -65,70 +80,53 @@ fun PantryScreen(modifier: Modifier = Modifier) {
                     .menuAnchor()
             )
 
-            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            // Items del menú con la lista de ingredientes
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
                 availableIngredients.forEach { ingredient ->
                     DropdownMenuItem(
                         text = { Text(ingredient.name) },
                         onClick = {
                             selectedIngredient = ingredient
-                            expanded = false
+                            expanded = false     // Cerramos el menú
                         }
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(Modifier.height(8.dp))
 
-        // Cantidad
-        OutlinedTextField(
-            value = quantity,
-            onValueChange = { quantity = it },
-            label = { Text("Cantidad", color = textColor) },
-            colors = TextFieldDefaults.outlinedTextFieldColors(
-                focusedTextColor = textColor,
-                focusedBorderColor = textColor,
-                unfocusedBorderColor = textColor,
-                cursorColor = textColor,
-                focusedLabelColor = textColor,
-                unfocusedLabelColor = textColor
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Botón Agregar
+        // Botón para agregar el ingrediente (cantidad fija a 1)
         Button(
             onClick = {
-                val qty = quantity.toIntOrNull() ?: 1
-                FoodRepository.addFood(Food(selectedIngredient, qty))
-                quantity = ""
+                FoodRepository.addFood(Food(selectedIngredient, 1))
             },
-            colors = ButtonDefaults.buttonColors(containerColor = buttonColor)
+            colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
+            modifier = Modifier.fillMaxWidth()
         ) {
             Text("Agregar", color = Color.White)
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(16.dp))
 
-        // Lista
+        // Lista de ingredientes añadidos (se sincroniza con Firestore)
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             itemsIndexed(FoodRepository.foodList) { index, food ->
                 FoodCard(
                     food = food,
                     textColor = textColor,
                     onMinus = {
+                        // Si al restar la cantidad llega a 0, elimina el documento
                         val newQty = food.quantity - 1
-                        if (newQty < 1) {
-                            FoodRepository.removeFood(index)
-                        } else {
-                            FoodRepository.updateFood(index, food.copy(quantity = newQty))
-                        }
+                        if (newQty < 1) FoodRepository.removeFood(index)
+                        else FoodRepository.updateFood(index, food.copy(quantity = newQty))
                     },
                     onPlus = {
-                        val newQty = food.quantity + 1
-                        FoodRepository.updateFood(index, food.copy(quantity = newQty))
+                        // Incrementa en Firestore
+                        FoodRepository.updateFood(index, food.copy(quantity = food.quantity + 1))
                     }
                 )
             }
@@ -150,6 +148,7 @@ fun FoodCard(
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Icono o imagen del ingrediente
             Icon(
                 painter = painterResource(id = food.ingredient.imageRes),
                 contentDescription = food.ingredient.name,
@@ -158,12 +157,12 @@ fun FoodCard(
                     .size(64.dp)
                     .padding(8.dp)
             )
-
             Column(modifier = Modifier.weight(1f)) {
+                // Nombre y cantidad
                 Text(food.ingredient.name, color = textColor)
                 Text("Cantidad: ${food.quantity}", color = textColor)
             }
-
+            // Botones para restar y sumar
             IconButton(onClick = onMinus) {
                 Icon(Icons.Filled.Delete, contentDescription = "Quitar", tint = textColor)
             }
@@ -173,3 +172,6 @@ fun FoodCard(
         }
     }
 }
+
+
+
